@@ -1,0 +1,51 @@
+{
+	"list" : [
+	    {
+			"id": "weapon_sabre",
+			"title": "Sabre",
+			"icon": "Sa",
+			"useType": "weapon",
+			"usePhase": "duringCombat",
+			"dmg": 1
+	    },
+	    {
+	    	"id": "weapon_axe",
+			"title": "Battle Axe",
+			"icon": "Ba",
+			"useType": "weapon",
+			"usePhase": "duringCombat",
+			"dmg": 2
+	    },
+	    {
+	    	"id": "weapon_maze",
+			"title": "Heavy Maze",
+			"icon": "Hm",
+			"useType": "weapon",
+			"usePhase": "duringCombat",
+			"dmg": 3
+	    },
+	    {
+	    	"id": "weapon_disruptor",
+			"title": "Disruptor",
+			"icon": "Dr",
+			"useType": "weapon",
+			"usePhase": "duringCombat",
+			"dmg": 0,
+			"monsterDmg": 4
+	    },
+	    {
+	    	"id": "artifact_boots",
+			"title": "Enchanted Boots",
+			"icon": "Eb",
+			"useType": "personal",
+			"usePhase": "beforeMoving"
+	    },
+	    {
+	    	"id": "artifact_teleporter",
+			"title": "Teleporter",
+			"icon": "Tp",
+			"useType": "personal",
+			"usePhase": "beforeMoving"
+	    }
+  	]
+}
