@@ -64,7 +64,7 @@ public class UIManager : MonoBehaviour
         ActivePlayer = GameManager.Instance.ActivePlayer;
         if(ActivePlayer!=null){
             PlayerLabel.text = ActivePlayer?.name;
-            if(ActivePlayer.GetComponent<Movement>().useAI){
+            if(ActivePlayer.GetComponent<Movement>().playerCore.useAI){
                 PlayerLabel.text += " (Bot)";
             }
             PlayerLabel.color = ActivePlayer.GetComponent<PlayerCore>().color;
@@ -157,7 +157,7 @@ public class UIManager : MonoBehaviour
     public void HandlePlayerCollision(GameObject[] Players){
         BattleAccept.GetComponentInChildren<Text>().text = "Figth "+Players[1].name;
         BattleButtonsUI.SetActive(true);
-        if(ActivePlayer.GetComponent<Movement>().useAI){
+        if(ActivePlayer.GetComponent<Movement>().playerCore.useAI){
             BattleAccept.interactable = false;
             BattleReject.interactable = false;
             StopCoroutine(SimulateAIWaitTime());
@@ -203,7 +203,7 @@ public class UIManager : MonoBehaviour
 
     IEnumerator SimulateAIWaitTime(){
         yield return new WaitForSeconds(0.5f);
-        if(ActivePlayer.GetComponent<Movement>().useAI){
+        if(ActivePlayer.GetComponent<Movement>().playerCore.useAI){
             if(Random.Range(0,2)==1){
                 // Player wants to fight!
                 BattleAccept.onClick.Invoke();
@@ -215,7 +215,7 @@ public class UIManager : MonoBehaviour
     }
 
     IEnumerator WaitBeforeClosingBattle(){
-        yield return new WaitForSeconds(1.5f);
-        EventManager.OnBattleEnd();
+        yield return new WaitForSeconds(1f);
+        TriggerBattleEnd();
     }
 }

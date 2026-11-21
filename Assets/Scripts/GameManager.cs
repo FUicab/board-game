@@ -58,7 +58,7 @@ public class GameManager : MonoBehaviour
 
     void OnEnable(){
         EventManager.TreasurePickedUp += HandleTreasurePickUp;
-        EventManager.BattleStart += HandleBattleStart;
+        EventManager.BattleStart += (duelers)=>{ StartCoroutine(HandleBattleStart(duelers)); };
         EventManager.BattleEnd += HandleBattleEnd;
         EventManager.BattleAccept += HandleBattleAccept;
         EventManager.BattleReject += HandleBattleReject;
@@ -68,7 +68,7 @@ public class GameManager : MonoBehaviour
 
     void OnDisable(){
         EventManager.TreasurePickedUp -= HandleTreasurePickUp;
-        EventManager.BattleStart -= HandleBattleStart;
+        EventManager.BattleStart -= (duelers) => { StartCoroutine(HandleBattleStart(duelers)); };
         EventManager.BattleEnd -= HandleBattleEnd;
         EventManager.BattleAccept -= HandleBattleAccept;
         EventManager.BattleReject -= HandleBattleReject;
@@ -118,6 +118,7 @@ public class GameManager : MonoBehaviour
         ActivePlayer.GetComponent<Movement>().Enemy = null;
         rollTheDice();
         ActivePlayer.GetComponent<Movement>().moves = DiceA + DiceB;
+        ActivePlayer.GetComponent<Movement>().StartTracking();
         switch(ItemDice){
             case "weapon":
                 ActivePlayer.GetComponent<Inventory>().AddToBag("random_weapon");
@@ -161,11 +162,12 @@ public class GameManager : MonoBehaviour
         // Instantiate(TreasurePrefab, newLocation, Quaternion.identity);
     }
 
-    public void HandleBattleStart(GameObject[] duelers){
+    public IEnumerator HandleBattleStart(GameObject[] duelers){
         // Deciding the winner...
         int winnerIndex = Random.Range(0,duelers.Length);
         AttackerDice = Random.Range(1,7);
         DefenderDice = Random.Range(1,7);
+        yield return new WaitForSeconds(1f);
         int difference = 1; // The difference between the winner and the loser
         // Deueler indexes: Attacker is 0 and Defender is 1
         if(AttackerDice==DefenderDice){ // It's a TIE

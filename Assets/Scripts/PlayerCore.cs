@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using static UnityEngine.GraphicsBuffer;
 
 public class PlayerCore : MonoBehaviour
 {
@@ -16,6 +17,8 @@ public class PlayerCore : MonoBehaviour
     public LayerMask Blocker;
     public Dice NumberDice = new Dice();
     public Dice ItemDice = new Dice();
+    public bool useAI = true;
+    public Transform corpse;
 
     void Start()
     {
@@ -79,7 +82,22 @@ public class PlayerCore : MonoBehaviour
 
     public void BattleDefeat(int damage = 0){
         HP -= damage;
-        if(HP<=0){
+        Transform corpseInstance = Instantiate(corpse, transform.position, new Quaternion(), null);
+        corpseInstance.gameObject.SetActive(true);
+        corpseInstance.GetComponent<SelfErase>().useSelfErase = true;
+        foreach (var transform in corpseInstance.GetComponentsInChildren<Transform>())
+        {
+            transform.position = new Vector3(transform.position.x + Random.Range(-0.2f,0.2f), 0.3f, transform.position.z + Random.Range(-0.2f, 0.2f));
+            transform.rotation = Quaternion.Euler(Random.Range(0,90), Random.Range(0,90), Random.Range(0,90));
+        }
+        foreach (var rb in corpseInstance.GetComponentsInChildren<Rigidbody>())
+        {
+            //Vector3 outwardDirection = (transform.position - corpseInstance.position).normalized;
+            Vector3 outwardDirection = new Vector3(rb.transform.position.x * Random.Range(-2f, 2f), 0.3f + Random.Range(0,8f), rb.transform.position.z * Random.Range(-2f, 2f)).normalized;
+            rb.AddForce(outwardDirection * 5f, ForceMode.Impulse);
+        }
+
+        if (HP<=0){
             // Destroy(gameObject);
             EventManager.OnPlayerDeath(gameObject);
         } else {
@@ -95,6 +113,8 @@ public class PlayerCore : MonoBehaviour
             stasis = true;
             setStasisState();
         }
+        //yield return new WaitForSeconds(3f);
+        //Destroy(corpseInstance);
     }
 }
 
