@@ -41,12 +41,16 @@ public class Movement : MonoBehaviour
     // float rotationSpeed = 12f;
     Quaternion headRotation = Quaternion.LookRotation(Vector3.forward);
     public PlayerCore playerCore;
-    public List<Vector3> endCells;
-    public List<Tracker> trackers;
 
     /* AI Related variables */
     //public bool useAI = false;
     public Vector3 target;
+    public List<Tracker> trackers; // The initial trackers
+    public List<Vector3> endPositions; // The available end positions
+    public List<Vector3> pathLocations; // All the walkable paths on the board
+    public List<Vector3> stepsToTarget;
+    public bool pathToTargetFound = false;
+    public Vector3 trackedTarget; // The position of the player's main target
     /* -------------------- */
 
 
@@ -135,23 +139,53 @@ public class Movement : MonoBehaviour
         // Debug.Log("Moves: "+moves);
     }
     
-    void TrackerEndCallback(Vector3 endPosition)
+
+    /* Tracking functions ------------------------------------------------------------------------------------------- */
+    public void TrackerEndCallback(Vector3 endPosition)
     {
+        endPositions.Add(endPosition);
         Debug.DrawRay(endPosition - ((Vector3.left + Vector3.forward) * 0.5f), ((Vector3.left + Vector3.forward) * 1f), Color.blue, 1f);
         Debug.DrawRay(endPosition - ((Vector3.right + Vector3.forward) * 0.5f), ((Vector3.right + Vector3.forward) * 1f), Color.blue, 1f);
     }
 
+    public bool RegisterPath(Vector3 pathLocation)
+    {
+        bool hasBeenSavedAlready = false;
+        pathLocations.ForEach(path =>
+        {
+            if (pathLocation.x == path.x && pathLocation.z == path.z) {
+                hasBeenSavedAlready = true;
+            }
+        });
+
+        if (!hasBeenSavedAlready) {
+            pathLocations.Add(pathLocation);
+        }
+        return hasBeenSavedAlready;
+    }
+
     public void StartTracking()
     {
-        if (transform.position != Vector3.zero)
+        trackers.Clear();
+        endPositions.Clear();
+        pathLocations.Clear();
+        stepsToTarget.Clear();
+        pathToTargetFound = false;
+
+        Vector3 eyesPosition = new Vector3(transform.position.x, 0.25f, transform.position.z);
+        if (CanMove(Vector3.forward)) { trackers.Add(new Tracker(eyesPosition, Vector3.forward, moves, this)); }
+        if (CanMove(Vector3.back)) { trackers.Add(new Tracker(eyesPosition, Vector3.back, moves, this)); }
+        if (CanMove(Vector3.left)) { trackers.Add(new Tracker(eyesPosition, Vector3.left, moves, this)); }
+        if (CanMove(Vector3.right)) { trackers.Add(new Tracker(eyesPosition, Vector3.right, moves, this)); }
+
+        int maxSteps = 36;
+        for (int i = 0; i < maxSteps; i++)
         {
-            Vector3 eyesPosition = new Vector3(transform.position.x, 0.25f, transform.position.z);
-            if (CanMove(Vector3.forward)) { trackers.Add(new Tracker(eyesPosition, Vector3.forward, moves, Blocker, TrackerEndCallback)); }
-            if (CanMove(Vector3.back)) { trackers.Add(new Tracker(eyesPosition, Vector3.back, moves, Blocker, TrackerEndCallback)); }
-            if (CanMove(Vector3.left)) { trackers.Add(new Tracker(eyesPosition, Vector3.left, moves, Blocker, TrackerEndCallback)); }
-            if (CanMove(Vector3.right)) { trackers.Add(new Tracker(eyesPosition, Vector3.right, moves, Blocker, TrackerEndCallback)); }
+            trackers.ForEach(tracker => tracker.LookAround(TrackerEndCallback, RegisterPath));
         }
     }
+
+    /* ------------------------------------------------------------------------------------------- */
 
     void doAIMovement(){
         // Debug.Log(Mathf.Round(Time.realtimeSinceStartup * 100f) / 100f);
@@ -159,58 +193,50 @@ public class Movement : MonoBehaviour
         Vector3 AIDirection;
 
         /* The AI's priority is now the treasure */
-        target = Vector3.zero;
-        foreach(GameObject treasureItem in GameObject.FindGameObjectsWithTag("Treasure")){
-            if(target==null || target==Vector3.zero){
-                target = treasureItem.transform.position;
-            } else if(Vector3.Distance(transform.position,target) > Vector3.Distance(transform.position,treasureItem.transform.position)){
-                target = treasureItem.transform.position;
+        if (pathToTargetFound && stepsToTarget.Count > 0) /* If the tracker found the treasure then we follow the path towards it */
+        {
+            AIDirection = stepsToTarget[0];
+            Debug.DrawRay(transform.position + Vector3.up * 0.33f, AIDirection, Color.darkSalmon, 0.5f);
+            stepsToTarget.RemoveAt(0);
+        } else /* Otherwise, we use the old AI pathfinding (may remove it in the future) */
+        {
+            target = Vector3.zero;
+            foreach(GameObject treasureItem in GameObject.FindGameObjectsWithTag("Treasure")){
+                if(target==null || target==Vector3.zero){
+                    target = treasureItem.transform.position;
+                } else if(Vector3.Distance(transform.position,target) > Vector3.Distance(transform.position,treasureItem.transform.position)){
+                    target = treasureItem.transform.position;
+                }
+            }
+            /* The direction towards the target is transformed into a Vector3 direction */
+            AIDirection = (target - transform.position).normalized;
+
+            /* Draw a ray to debug the direction
+               It is needed even if the player doesn't move towards the target
+             */
+            Debug.DrawLine(transform.position, target, Color.magenta, 0.1f, false);
+
+            /* The direction towards the target is transformed into a Vector3 direction
+               If the diagonal towards the target is leaning more to a given direction it will go that way
+            */
+            if(Mathf.Abs(AIDirection.x) >= Mathf.Abs(AIDirection.z)){
+                /* If the path is blocked or illegal we go the other way */
+                if(!Physics.Raycast(transform.position, new Vector3(Mathf.Sign(AIDirection.x)*Mathf.Ceil(Mathf.Abs(AIDirection.x)),0,0), 6, Blocker)
+                    &&(new Vector3(Mathf.Sign(AIDirection.x)*Mathf.Ceil(Mathf.Abs(AIDirection.x)),0,0))!=(currentDirection*-1)){
+                    AIDirection = new Vector3(Mathf.Sign(AIDirection.x)*Mathf.Ceil(Mathf.Abs(AIDirection.x)),0,0);
+                } else {
+                    AIDirection = new Vector3(0,0,Mathf.Sign(AIDirection.z)*Mathf.Ceil(Mathf.Abs(AIDirection.z)));
+                }
+            } else {
+                if(!Physics.Raycast(transform.position, new Vector3(0,0,Mathf.Sign(AIDirection.z)*Mathf.Ceil(Mathf.Abs(AIDirection.z))), 6, Blocker)
+                    &&(new Vector3(0,0,Mathf.Sign(AIDirection.z)*Mathf.Ceil(Mathf.Abs(AIDirection.z))))!=(currentDirection*-1)){
+                    AIDirection = new Vector3(0,0,Mathf.Sign(AIDirection.z)*Mathf.Ceil(Mathf.Abs(AIDirection.z)));
+                } else {
+                    AIDirection = new Vector3(Mathf.Sign(AIDirection.x)*Mathf.Ceil(Mathf.Abs(AIDirection.x)),0,0);
+                }
             }
         }
         
-        /* The direction towards the target is transformed into a Vector3 direction */
-        AIDirection = (target - transform.position).normalized;
-
-        /* Draw a ray to debug the direction
-           It is needed even if the player doesn't move towards the target
-         */
-        Debug.DrawLine(transform.position, target, Color.magenta, 0.1f, false);
-
-        /* Generate all the possible routes */
-        //List<Vector3> potentialRoutes = new();
-        //bool routeFound = false;
-        //if(target != Vector3.zero)
-        //{
-            
-        //}
-
-
-        /* The direction towards the target is transformed into a Vector3 direction
-           If the diagonal towards the target is leaning more to a given direction it will go that way
-        */
-        if(Mathf.Abs(AIDirection.x) >= Mathf.Abs(AIDirection.z)){
-            /* If the path is blocked or illegal we go the other way */
-            if(!Physics.Raycast(transform.position, new Vector3(Mathf.Sign(AIDirection.x)*Mathf.Ceil(Mathf.Abs(AIDirection.x)),0,0), 6, Blocker)
-                &&(new Vector3(Mathf.Sign(AIDirection.x)*Mathf.Ceil(Mathf.Abs(AIDirection.x)),0,0))!=(currentDirection*-1)){
-                AIDirection = new Vector3(Mathf.Sign(AIDirection.x)*Mathf.Ceil(Mathf.Abs(AIDirection.x)),0,0);
-            } else {
-                AIDirection = new Vector3(0,0,Mathf.Sign(AIDirection.z)*Mathf.Ceil(Mathf.Abs(AIDirection.z)));
-            }
-        } else {
-            if(!Physics.Raycast(transform.position, new Vector3(0,0,Mathf.Sign(AIDirection.z)*Mathf.Ceil(Mathf.Abs(AIDirection.z))), 6, Blocker)
-                &&(new Vector3(0,0,Mathf.Sign(AIDirection.z)*Mathf.Ceil(Mathf.Abs(AIDirection.z))))!=(currentDirection*-1)){
-                AIDirection = new Vector3(0,0,Mathf.Sign(AIDirection.z)*Mathf.Ceil(Mathf.Abs(AIDirection.z)));
-            } else {
-                AIDirection = new Vector3(Mathf.Sign(AIDirection.x)*Mathf.Ceil(Mathf.Abs(AIDirection.x)),0,0);
-            }
-        }
-        
-        // Debug.DrawRay(transform.position, AIDirection * 4, Color.red);
-        if(Vector3.Equals(AIDirection,Vector3.zero)){
-            // Debug.DrawRay(transform.position, (target - transform.position).normalized*Vector3.Distance(transform.position, target), Color.white, 5f , false);
-            // Debug.Log(transform.position.ToString()+" | "+target.ToString());
-            // Debug.Log("FOUND A ZERO MATCH!!!");
-        }
 
         /* Draw a ray to debug the direction */
         Debug.DrawRay(transform.position, AIDirection*4, Color.red, 0.1f, false);
@@ -219,15 +245,15 @@ public class Movement : MonoBehaviour
            UNFINISHED!!! Let's finish this sometime in the future
          */
         bool pathBlocked = false;
-        if(Vector3.Equals(AIDirection,Vector3.forward)||Vector3.Equals(AIDirection,Vector3.back)){
-            if(Physics.Raycast(transform.position, AIDirection, Vector3.Distance(transform.position, new Vector3(target.x,transform.position.y,transform.position.z)), Blocker)){
-                pathBlocked = true;
-            }
-        } else if(Vector3.Equals(AIDirection,Vector3.left)||Vector3.Equals(AIDirection,Vector3.right)){
-            if(Physics.Raycast(transform.position, AIDirection, Vector3.Distance(transform.position, new Vector3(transform.position.x,transform.position.y,target.z)), Blocker)){
-                pathBlocked = true;
-            }
-        }
+        //if(Vector3.Equals(AIDirection,Vector3.forward)||Vector3.Equals(AIDirection,Vector3.back)){
+        //    if(Physics.Raycast(transform.position, AIDirection, Vector3.Distance(transform.position, new Vector3(target.x,transform.position.y,transform.position.z)), Blocker)){
+        //        pathBlocked = true;
+        //    }
+        //} else if(Vector3.Equals(AIDirection,Vector3.left)||Vector3.Equals(AIDirection,Vector3.right)){
+        //    if(Physics.Raycast(transform.position, AIDirection, Vector3.Distance(transform.position, new Vector3(transform.position.x,transform.position.y,target.z)), Blocker)){
+        //        pathBlocked = true;
+        //    }
+        //}
 
         if(!pathBlocked && CanMove(AIDirection) && !Vector3.Equals(AIDirection,Vector3.zero)
             ){
@@ -354,55 +380,209 @@ public class Movement : MonoBehaviour
 [Serializable]
 public class Tracker
 {
-    Vector3 originPosition;
     Vector3 trackerPosition;
     Vector3 incomingDirection;
     int stepsLeft = 0;
     LayerMask Blocker = LayerMask.NameToLayer("Blocker");
     public delegate void TrackEndCallback(Vector3 trackEnd);
     List<Tracker> subtrackers = new();
+    List<TrackerFootPrint> footPrints = new();
+    Tracker parent;
+    public delegate bool PathRegisterCallback(Vector3 path);
+    Movement movement;
+    bool priorityPath = false; //TRUE if this path leads towards the target
+    Vector3 targetLocation;
 
-    public Tracker(Vector3 initialPosition, Vector3 incomingDirection, int stepsLeft, LayerMask blocker, TrackEndCallback callback)
+    public Tracker(Vector3 initialPosition, Vector3 incomingDirection, int stepsLeft, Movement movement, Tracker parent = null)
     {
-        this.originPosition = initialPosition;
         this.incomingDirection = incomingDirection;
         this.trackerPosition = initialPosition + (incomingDirection * 2f);
-        this.stepsLeft = stepsLeft;
-        this.Blocker = blocker;
-        this.LookAround(callback);
+        //this.trackerPosition = initialPosition;
+        this.stepsLeft= stepsLeft;
+        this.Blocker = movement.Blocker;
+        this.movement = movement;
+        //this.LookAround(movement.TrackerEndCallback, movement.RegisterPath);
+        this.parent= parent;
+        this.targetLocation = movement.target;
+        //this.footPrints.Add(new TrackerFootPrint(initialPosition, incomingDirection));
     }
 
-    public void LookAround(TrackEndCallback endCallback)
+    public void LookAround(TrackEndCallback endCallback, PathRegisterCallback pathCallback)
     {
+        //this.validDirections.Clear();
         this.stepsLeft--;
-        Debug.DrawRay(trackerPosition, incomingDirection * -2, Color.yellow, 1f);
+
         if(this.stepsLeft > 0)
         {
-            //Debug.DrawRay(trackerPosition - incomingDirection, incomingDirection * -1, new Color(0, (255 / 12) * stepsLeft, 255), 0.25f);
-            List<Vector3> validDirections = new();
-            if (!IsDirectionBlocked(Vector3.forward)) { validDirections.Add(Vector3.forward); }
-            if (!IsDirectionBlocked(Vector3.back)) { validDirections.Add(Vector3.back); }
-            if (!IsDirectionBlocked(Vector3.left)) { validDirections.Add(Vector3.left); }
-            if (!IsDirectionBlocked(Vector3.right)) { validDirections.Add(Vector3.right); }
-            if (validDirections.Count > 0)
+            //Debug.DrawRay(trackerPosition, incomingDirection * -2, Color.yellow, 0.5f);
+            bool isDuplicate = pathCallback(trackerPosition);
+            if (!isDuplicate)
             {
-                foreach (Vector3 direction in validDirections)
-                {
-                    subtrackers.Add(new Tracker(trackerPosition, direction, stepsLeft, Blocker, endCallback));
-                }
-            } else if(validDirections.Count == 0)
+                CheckAndBranch();
+            } else
             {
-                subtrackers.Add(new Tracker(trackerPosition, incomingDirection * -1, stepsLeft, Blocker, endCallback));
+                DrawDuplicationCross();
             }
-        } else
+        } else if(this.stepsLeft <= 0)
         {
-            endCallback(trackerPosition);
+            if(this.stepsLeft == 0)
+            {
+                //Debug.DrawRay(trackerPosition, incomingDirection * -2, Color.yellow, 0.5f);
+                endCallback(trackerPosition);
+            }
+            bool isDuplicate = pathCallback(trackerPosition);
+            if (!isDuplicate) {
+                if(this.stepsLeft < 0)
+                {
+                    //Debug.DrawRay(trackerPosition, incomingDirection * -2, Color.white, 0.5f);
+                }
+                CheckAndBranch();
+            } else
+            {
+                DrawDuplicationCross();
+            }
+        }
+        subtrackers.ForEach(subtracker => subtracker.LookAround(endCallback, pathCallback));
+    }
+
+    public void MoveTrack(Vector3 direction)
+    {
+        //Debug.DrawRay(trackerPosition, incomingDirection * -2, Color.white, 0.5f);
+        this.trackerPosition = trackerPosition + (direction * 2f);
+        this.incomingDirection = direction;
+
+        //if(trackerPosition.x == targetLocation.x && trackerPosition.z == targetLocation.z)
+        //{
+        //    TargetLocationFound();
+        //}
+
+        if (!movement.pathToTargetFound)
+        {
+            RaycastHit hit;
+            if (Physics.Raycast(this.trackerPosition + Vector3.up, Vector3.down, out hit, 1f))
+            {
+                if (hit.transform.CompareTag("Treasure"))
+                {
+                    this.TargetLocationFound();
+                }
+            }
         }
     }
 
     public bool IsDirectionBlocked(Vector3 direction)
     {
-        return (Physics.Raycast(trackerPosition, direction, 2f, Blocker) || direction == (this.incomingDirection * -1));
+        return (Physics.Raycast(this.trackerPosition, direction, 2f, this.Blocker) || Vector3.Equals(direction,this.incomingDirection * -1f));
+    }
+
+    public void CheckAndBranch()
+    {
+        bool shouldMove = false;
+        Vector3 moveDirection = Vector3.zero;
+        List<Vector3> validDirections = new();
+        if (!IsDirectionBlocked(Vector3.forward)) { validDirections.Add(Vector3.forward); }
+        if (!IsDirectionBlocked(Vector3.back)) { validDirections.Add(Vector3.back); }
+        if (!IsDirectionBlocked(Vector3.left)) { validDirections.Add(Vector3.left); }
+        if (!IsDirectionBlocked(Vector3.right)) { validDirections.Add(Vector3.right); }
+
+        if (validDirections.Count > 0)
+        {
+            footPrints.Add(new TrackerFootPrint(trackerPosition, incomingDirection));
+            foreach (Vector3 direction in validDirections)
+            {
+                if (direction == incomingDirection || validDirections.Count == 1)
+                {
+                    //Debug.DrawRay(trackerPosition, direction * 1.75f, Color.white, 0.5f);
+                    //DrawArrow(direction);
+                    //footPrints.Add(new TrackerFootPrint(trackerPosition, incomingDirection));
+                    moveDirection = direction;
+                    shouldMove = true;
+                } else
+                {
+                    //Debug.DrawRay(trackerPosition, direction * 1.75f, Color.orange, 0.5f);
+                    //DrawArrow(direction);
+                    Tracker newTracker = new Tracker(trackerPosition, direction, stepsLeft, movement, this);
+                    //footPrints.Add(new TrackerFootPrint(trackerPosition, incomingDirection));
+                    newTracker.footPrints.AddRange(footPrints);
+                    subtrackers.Add(newTracker);
+                }
+            }
+            if (shouldMove)
+            {
+                    MoveTrack(moveDirection);
+            }
+        }
+        else if (validDirections.Count == 0)
+        {
+            if (stepsLeft > 0)
+            {
+                MoveTrack(incomingDirection * -1f);
+            }
+            //subtrackers.Add(new Tracker(trackerPosition, incomingDirection * -1, stepsLeft, Blocker, endCallback, pathCallback, targetLocation, this));
+        }
+    }
+
+    public void TargetLocationFound()
+    {
+        this.priorityPath = true;
+        Debug.DrawRay(trackerPosition + Vector3.up*0.05f, incomingDirection * -1.75f, Color.cyan, 0.5f);
+        footPrints.ForEach(footprint => {
+            footprint.color = Color.cyan;
+            footprint.DrawLine();
+            movement.stepsToTarget.Add(footprint.incomingDirection);
+        });
+        movement.pathToTargetFound = true;
+        //if (this.parent != null) {
+        //    this.parent.TargetLocationFound();
+        //    this.parent.footPrints.ForEach((footprint) => {
+        //        footprint.color = Color.cyan; 
+        //        footprint.DrawLine();
+        //    });
+        //}
+    }
+    public void DrawArrow(Vector3 direction)
+    {
+        if (direction == Vector3.forward)
+        {
+            Debug.DrawRay(trackerPosition + (Vector3.forward * 1.75f) + (Vector3.back + Vector3.left) * 0.25f, (Vector3.forward + Vector3.right) * 0.25f, Color.white, 0.5f);
+            Debug.DrawRay(trackerPosition + (Vector3.forward * 1.75f) + (Vector3.back + Vector3.right) * 0.25f, (Vector3.forward + Vector3.left) * 0.25f, Color.white, 0.5f);
+        }
+        if (direction == Vector3.back)
+        {
+            Debug.DrawRay(trackerPosition + (Vector3.back * 1.75f) + (Vector3.forward + Vector3.left) * 0.25f, (Vector3.back + Vector3.right) * 0.25f, Color.white, 0.5f);
+            Debug.DrawRay(trackerPosition + (Vector3.back * 1.75f) + (Vector3.forward + Vector3.right) * 0.25f, (Vector3.back + Vector3.left) * 0.25f, Color.white, 0.5f);
+        }
+        if (direction == Vector3.right)
+        {
+            Debug.DrawRay(trackerPosition + (Vector3.right * 1.75f) + (Vector3.left + Vector3.back) * 0.25f, (Vector3.right + Vector3.forward) * 0.25f, Color.white, 0.5f);
+            Debug.DrawRay(trackerPosition + (Vector3.right * 1.75f) + (Vector3.left + Vector3.forward) * 0.25f, (Vector3.right + Vector3.back) * 0.25f, Color.white, 0.5f);
+        }
+        if (direction == Vector3.left)
+        {
+            Debug.DrawRay(trackerPosition + (Vector3.left * 1.75f) + (Vector3.right + Vector3.back) * 0.25f, (Vector3.left + Vector3.forward) * 0.25f, Color.white, 0.5f);
+            Debug.DrawRay(trackerPosition + (Vector3.left * 1.75f) + (Vector3.right + Vector3.forward) * 0.25f, (Vector3.left + Vector3.back) * 0.25f, Color.white, 0.5f);
+        }
+    }
+
+    public void DrawDuplicationCross()
+    {
+        Debug.DrawRay(trackerPosition + (Vector3.back + Vector3.left) * 0.125f, (Vector3.forward + Vector3.right) * 0.25f, Color.red, 0.5f);
+        Debug.DrawRay(trackerPosition + (Vector3.back + Vector3.right) * 0.125f, (Vector3.forward + Vector3.left) * 0.25f, Color.red, 0.5f);
+    }
+}
+
+public class TrackerFootPrint
+{
+    public Vector3 position;
+    public Vector3 incomingDirection;
+    public Color color = Color.white;
+    public TrackerFootPrint(Vector3 position, Vector3 incomingDirecion){
+        this.position = position;
+        this.incomingDirection = incomingDirecion;
+    }
+
+    public void DrawLine()
+    {
+        Debug.DrawRay(position + Vector3.up * 0.05f, incomingDirection * -1.75f, color, 0.5f);
     }
 }
 

@@ -94,7 +94,7 @@ public class PlayerCore : MonoBehaviour
         {
             //Vector3 outwardDirection = (transform.position - corpseInstance.position).normalized;
             Vector3 outwardDirection = new Vector3(rb.transform.position.x * Random.Range(-2f, 2f), 0.3f + Random.Range(0,8f), rb.transform.position.z * Random.Range(-2f, 2f)).normalized;
-            rb.AddForce(outwardDirection * 5f, ForceMode.Impulse);
+            rb.AddForce(outwardDirection * (3f + Mathf.Pow(damage,1.5f)), ForceMode.Impulse);
         }
 
         if (HP<=0){

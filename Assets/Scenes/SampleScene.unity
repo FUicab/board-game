@@ -11823,6 +11823,10 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 6525280104073307115, guid: eace5eadd2451d14a88f0c449a6a8131, type: 3}
+      propertyPath: m_TagString
+      value: Treasure
+      objectReference: {fileID: 0}
     - target: {fileID: 6525280104349960848, guid: eace5eadd2451d14a88f0c449a6a8131, type: 3}
       propertyPath: m_CastShadows
       value: 1
